@@ -18,7 +18,7 @@ USER vscode
 WORKDIR /nano-code
 
 # 基本環境変数（nanoはテキストエディタ、プロジェクト名とは無関係）
-ENV EDITOR=nano
+ENV EDITOR=vim
 ENV DEVCONTAINER=true
 ENV PATH="/home/vscode/.bun/bin:$PATH"
 

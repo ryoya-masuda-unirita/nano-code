@@ -88,6 +88,10 @@ export function createOpenAI(config: ProviderConfig = {}): Provider {
         maxRetries: config.maxRetries ?? 0,
     });
 
+    // interface LanguageModel {
+    //     doGenerate(params: GenerateParams): Promise<GenerateTextResult>;
+    //     doStream?(params: GenerateParams): AsyncIterable<StreamChunk>;
+    //   }
     const provider = (modelId: string): LanguageModel => ({
         async doGenerate(params: GenerateParams): Promise<GenerateTextResult> {
             const tools =
