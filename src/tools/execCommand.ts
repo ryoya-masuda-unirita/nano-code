@@ -6,6 +6,9 @@ const WORKSPACE_ROOT = path.resolve(process.cwd(), './workspace');
 const ALLOWED_COMMANDS = ['bun', 'ls', 'cat', 'grep', 'find', 'pwd', 'mkdir', 'git', 'gh'];
 const MAX_OUTPUT_LENGTH = 2000;
 
+// `'"' | "'" | null` は「ダブルクォート または シングルクォート または null」の
+// リテラル型ユニオン。「今どの引用符の中にいるか」を表す状態変数の型として使う。
+// Pythonの `Literal['"', "'", None]` に相当する。
 type Quote = '"' | "'" | null;
 type ExecCommandInput = {
     command?: unknown;
@@ -14,13 +17,17 @@ type ExecCommandInput = {
 };
 
 // 引用符付き引数をサポートする最小限のコマンドパーサ
+// 1文字ずつ状態機械（ステートマシン）として処理していく典型的な文字列パーサ実装。
 export function parseCommand(input: string): string[] {
     const tokens: string[] = [];
     let current = '';
     let quote: Quote = null;
     let escaped = false;
 
+    // C言語風のfor文で文字列を1文字ずつ走査する。Pythonの `for i, ch in enumerate(input):` に近い。
     for (let i = 0; i < input.length; i++) {
+        // `input[i]` の型は `string | undefined` になり得るため `as string` で確定させている
+        // （ループ範囲内なので実際にundefinedになることはない）。
         const ch = input[i] as string;
 
         if (quote) {

@@ -4,18 +4,25 @@ import type { Message, Tool, LanguageModel } from '../types';
 import { LLMApiError } from '../types';
 import { requestApproval } from './approval';
 
+// このAgentクラスのコンストラクタに渡す設定の形。
 interface AgentConfig {
     name: string;
     model: LanguageModel;
     instructions: string;
     tools: Record<string, any>;
     maxSteps?: number;
+    // 関数型のプロパティ。「ツール名とその引数を受け取り、承認するかどうかを非同期で返す関数」。
     approvalFunc?: (name: string, args: any) => Promise<boolean>;
     verbose?: boolean;
     useStreaming?: boolean;
 }
 
+// TypeScriptのクラスはPythonのクラスとほぼ同じ形で書ける。
 export class Agent {
+    // クラスのプロパティ（フィールド）は、Pythonのように `__init__` の中で
+    // `self.xxx = xxx` するのではなく、クラス本体の先頭でまとめて宣言するのが一般的。
+    // `private` はTypeScript独自のアクセス修飾子で、「このクラスの外からは参照できない」ことを示す。
+    // Pythonでは慣習的に `_name`（アンダースコア始まり）で私的扱いを表すのに近い。
     private name: string;
     private model: LanguageModel;
     private instructions: string;
@@ -25,10 +32,12 @@ export class Agent {
     private verbose?: boolean;
     private useStreaming?: boolean;
 
+    // `constructor` はPythonの `__init__` に相当する初期化メソッド。
     constructor(config: AgentConfig) {
         this.name = config.name;
         this.model = config.model;
         this.instructions = config.instructions;
+        // `Object.values(config.tools)` は辞書の値だけを配列にする（Pythonの `dict.values()` に相当）。
         this.tools = Object.values(config.tools);
         this.maxSteps = config.maxSteps || 10;
         this.approvalFunc = config.approvalFunc || requestApproval;
@@ -39,10 +48,14 @@ export class Agent {
     /**
      * コンテキストサイズを管理し、制限を超えそうな場合に履歴を圧縮する
      */
+    // クラスの「メソッド」にも `private` を付けられる。外部から `agent.manageContext(...)` は呼べない。
     private manageContext(messages: Message[]): Message[] {
         // 簡易的な制限：文字数で判定（例: 30,000文字 ≈ 10k~15kトークン程度と仮定）
         const CHAR_LIMIT = 30000;
 
+        // `.reduce((sum, m) => sum + ..., 0)` は配列を1つの値に集約する。
+        // Pythonの `sum(len(m.get("content", "")) for m in messages)` に相当。
+        // `m.content?.length || 0` は「contentがあればその長さ、なければ0」というフォールバック。
         let totalLength = messages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
 
         // 制限内なら何もしない
@@ -57,13 +70,19 @@ export class Agent {
         if (!systemMessage) {
             return messages;
         }
+        // `.slice(-4)` は末尾4件を取り出す（Pythonの `messages[-4:]` に相当）。
         const recentMessages = messages.slice(-4);
+        // `.slice(1, -4)` は先頭1件と末尾4件を除いた「中間部分」（Pythonの `messages[1:-4]`）。
         let middleMessages = messages.slice(1, -4);
 
         // 2. 戦略A: 古いツール実行結果を「省略」に置換
+        // `.map(...)` は各要素を変換して新しい配列を作る（Pythonのリスト内包表記に相当）。
         middleMessages = middleMessages.map(msg => {
             if (msg.role === 'tool' && msg.content && msg.content.length > 200) {
                 return {
+                    // `...msg` はスプレイド構文。既存のプロパティをコピーしつつ、
+                    // 続けて書いた `content` だけを上書きした新しいオブジェクトを作る。
+                    // Pythonの `{**msg, "content": "..."}` に相当（イミュータブルな更新パターン）。
                     ...msg,
                     content: `(以前のツール実行結果は省略されました: ${msg.content.length}文字)`
                 };
@@ -77,6 +96,7 @@ export class Agent {
                       recentMessages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
 
         while (totalLength > CHAR_LIMIT && middleMessages.length > 0) {
+            // `.shift()` は配列の先頭を取り除いて返す（Pythonの `list.pop(0)` に相当。ただしO(n)）。
             const removed = middleMessages.shift();
             if (removed) {
                 totalLength -= (removed.content?.length || 0);
@@ -86,6 +106,8 @@ export class Agent {
         return [systemMessage, ...middleMessages, ...recentMessages];
     }
 
+    // 戻り値の型をその場でオブジェクト型として定義。
+    // `finishReason` は決められた文字列リテラルのどれかしか入らないユニオン型。
     async generate(userPrompt: string): Promise<{
         text: string;
         finishReason: 'stop' | 'max_steps' | 'length' | 'content_filter' | 'error';
@@ -109,6 +131,10 @@ export class Agent {
             // コンテキスト管理
             messages = this.manageContext(messages);
 
+            // `(async () => { ... })()` は「即時実行される非同期の無名関数（IIFE）」。
+            // if/elseで結果の作り方が分かれる処理を1つの式にまとめてawaitするためのテクニック。
+            // Pythonには構文としての対応物はないが、同じ処理を書くなら
+            // 通常はヘルパー関数を先に定義してから呼び出す形になる。
             const response = await (async () => {
                 if (this.useStreaming) {
                     if (this.model.doStream) {
@@ -119,6 +145,8 @@ export class Agent {
                             maxTokens: 4096,
                             onChunk: (chunk) => {
                                 if (chunk.kind === 'delta' && chunk.text) {
+                                    // `process.stdout.write` は改行なしで標準出力に書く（Pythonの
+                                    // `print(text, end="")` に相当）。ストリーミング表示に使う。
                                     process.stdout.write(chunk.text);
                                 }
                             },
@@ -153,6 +181,8 @@ export class Agent {
                 });
 
                 for (const toolCall of response.toolCalls) {
+                    // `.find(...)` は条件を満たす最初の要素を返す（見つからなければundefined）。
+                    // Pythonの `next((t for t in tools if t.name == name), None)` に相当。
                     const tool = this.tools.find(t => t.name === toolCall.name);
                     if (tool) {
                         console.log(`[ツール] ${toolCall.name}(${JSON.stringify(toolCall.args)})`);
@@ -166,6 +196,7 @@ export class Agent {
                                     name: toolCall.name,
                                     content: 'ユーザーによってキャンセルされました。別の方法を検討してください。'
                                 });
+                                // `continue` はPythonと同じくループの次周回に進む。
                                 continue;
                             }
                         }

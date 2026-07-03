@@ -7,6 +7,8 @@ import type {
     StreamChunk,
 } from '../types';
 import { LLMApiError } from '../types';
+// `{ GoogleGenAI, type Content, type Part }` のように、1つのimport文の中で
+// 「値としてのGoogleGenAI」と「型だけのContent/Part」を混在させて書ける（インライン type 修飾子）。
 import { GoogleGenAI, type Content, type Part } from '@google/genai';
 
 export type ProviderConfig = {
@@ -20,6 +22,8 @@ function mapGoogleFinishReason(
     if (hasFunctionCall) {
         return 'tool_calls';
     }
+    // `?.toUpperCase()` はオプショナルチェイニング＋メソッド呼び出し。
+    // finishReasonがnull/undefinedならエラーにならず結果もundefinedになる。
     const normalized = finishReason?.toUpperCase();
     switch (normalized) {
         case 'STOP':
@@ -34,6 +38,8 @@ function mapGoogleFinishReason(
     }
 }
 
+// 戻り値の型 `Content[]` を明示。Google GenAI SDKが定義する型で、
+// 「role と parts を持つメッセージの配列」を表す。
 function convertMessages(messages: GenerateParams['messages']): Content[] {
     return messages
         .filter((m) => m.role !== 'system')
@@ -57,6 +63,8 @@ function convertMessages(messages: GenerateParams['messages']): Content[] {
                 if (message.content) {
                     parts.push({ text: message.content });
                 }
+                // `.forEach(...)` は配列の各要素に対して処理を実行するだけで、新しい配列は作らない
+                // （Pythonの `for tc in message.toolCalls:` と同じ効果、戻り値は使わない）。
                 message.toolCalls.forEach((tc) => {
                     parts.push({ functionCall: { name: tc.name, args: tc.args } });
                 });
@@ -129,6 +137,9 @@ export function createGoogle(config: ProviderConfig = {}): Provider {
                 }
 
                 const parts = candidate.content.parts;
+                // `(p: any) => p.text` の `any` は「型チェックを放棄する」明示的な指定。
+                // Google SDKのpartsの型がtext/functionCallなど複数の形の合併で複雑なため、
+                // ここでは簡易的にanyにして扱っている（本来はもっと厳密な型を書くのが望ましい）。
                 const textParts = parts.filter((p: any) => p.text);
                 const text = textParts.map((p: any) => p.text).join('');
                 const functionCallParts = parts.filter(
@@ -148,6 +159,9 @@ export function createGoogle(config: ProviderConfig = {}): Provider {
                     text,
                     finishReason: mapGoogleFinishReason(
                         candidate.finishReason,
+                        // `!!` は「truthy/falsyな値を確実にboolean型に変換する」慣用テクニック。
+                        // `!x` で否定して `!!x` でもう一度否定すると元の真偽値のbooleanになる。
+                        // Pythonの `bool(x)` に相当する。
                         !!toolCalls?.length
                     ),
                     usage: {
@@ -162,6 +176,10 @@ export function createGoogle(config: ProviderConfig = {}): Provider {
                     500,
                     'google',
                     undefined,
+                    // `error instanceof Error ? error.message : String(error)` は
+                    // 「投げられたものがErrorインスタンスとは限らない」ケースへの対処。
+                    // TypeScript/JavaScriptでは `throw` に何でも渡せてしまうため、
+                    // Errorでなければ `String(error)` で無理やり文字列化している。
                     error instanceof Error ? error.message : String(error),
                     error
                 );

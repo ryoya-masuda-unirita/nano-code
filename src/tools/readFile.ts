@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 const WORKSPACE_ROOT = path.resolve(process.cwd(), './workspace');
+// `100 * 1024` のような定数計算はそのままJSエンジンが計算してくれる（Pythonと同じ）。
 const MAX_FILE_SIZE = 100 * 1024; // 100KB
 
 async function readFileExecute(args: { path: string }): Promise<string> {
@@ -33,9 +34,13 @@ async function readFileExecute(args: { path: string }): Promise<string> {
 
         return await fs.readFile(absolutePath, 'utf-8');
     } catch (error: any) {
+        // catchの変数に `: any` を付けて型チェックを緩めている。
+        // Node.jsのファイルシステムエラーは `error.code` に 'ENOENT'（該当ファイルなし）などの
+        // 独自プロパティを持つが、標準のError型にはそれが定義されていないための対応。
         if (error.code === 'ENOENT') {
             throw new Error(`ファイルが見つかりません: ${args.path}`);
         }
+        // 想定外のエラーはそのまま再送出（Pythonの `raise` のみと同じ）。
         throw error;
     }
 }

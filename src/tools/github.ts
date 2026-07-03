@@ -1,9 +1,13 @@
 import { execCommand } from './execCommand';
+// `{ writeFileSync, ... }` のように波括弧で複数の関数を同時にimportできる（名前付きimport）。
+// Pythonの `from fs import write_file_sync, unlink_sync, mkdir_sync, exists_sync` に相当。
 import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const WORKSPACE_ROOT = join(process.cwd(), 'workspace');
 
+// 戻り値が `void` の関数は「何も返さない」ことを表す（Pythonの `-> None` に相当）。
+// 検証(validate)系の関数は「問題があれば例外を投げる、問題なければ何も返さず終わる」設計。
 function validateBranchName(name: string): void {
     if (!name || name.length > 120) {
         throw new Error('ブランチ名が不正です');
@@ -63,6 +67,9 @@ export const createPullRequest = {
         },
         required: ['title', 'body', 'head', 'base']
     },
+    // オブジェクトのプロパティにアロー関数を直接代入するスタイル。
+    // `execute: async (args: {...}) => { ... }` は
+    // `async function execute(args: {...}) { ... }` を1つの式として書いたものと同じ。
     execute: async (args: {
         title: string;
         body: string;
@@ -81,7 +88,9 @@ export const createPullRequest = {
         const bodyFile = writeTempFile(args.body, 'pr-body');
 
         try {
+            // `JSON.parse` はPythonの `json.loads` に相当。'[]' をデフォルトにして空配列扱いにしている。
             const existingPRs = JSON.parse(listResult || '[]');
+            // `Array.isArray(x)` は「xが配列かどうか」を調べる（Pythonの `isinstance(x, list)` に相当）。
             if (Array.isArray(existingPRs) && existingPRs.length > 0) {
                 const prNumber = String(existingPRs[0].number);
                 await execCommand.execute({
@@ -101,6 +110,7 @@ export const createPullRequest = {
             });
             return `PRを作成しました: ${result}`;
         } finally {
+            // 一時ファイルの削除に失敗しても処理全体は止めたくないので、内側にもtry/catchを入れている。
             try { unlinkSync(bodyFile); } catch { /* ignore */ }
         }
     }
@@ -128,6 +138,7 @@ export const createIssueComment = {
         issueNumber: number;
         body: string;
     }) => {
+        // `Number.isInteger(x)` は「xが整数かどうか」の判定（Pythonの `isinstance(x, int)` に相当）。
         if (!Number.isInteger(args.issueNumber) || args.issueNumber <= 0) {
             throw new Error('issueNumber は正の整数で指定してください');
         }

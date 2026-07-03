@@ -9,8 +9,13 @@ import type {
     ToolCall,
 } from '../types';
 import { LLMApiError } from '../types';
+// 別の自作ファイル（./openai）から型だけをimportしている。
+// 自分のプロジェクト内のモジュールでも `import type` は使える。
 import type { ProviderConfig } from './openai';
 
+// SDKが提供する長い型名に、短い別名を付けている（型エイリアス）。
+// Pythonで `ResponsesInput = openai.types.responses.ResponseInputItem` と
+// 別名をつけるのに近い発想。以降このファイルでは短い名前で書ける。
 type ResponsesInput = OpenAI.Responses.ResponseInputItem;
 
 function convertMessagesToInput(messages: Message[]): ResponsesInput[] {
@@ -64,6 +69,7 @@ function convertMessagesToInput(messages: Message[]): ResponsesInput[] {
 }
 
 function extractSystemMessage(messages: Message[]): string | undefined {
+    // `.find(...)` は最初に条件を満たした要素、無ければundefinedを返す。
     const system = messages.find((m) => m.role === 'system');
     return system?.content;
 }
@@ -88,6 +94,8 @@ function mapFinishReason(status?: string): GenerateTextResult['finishReason'] {
             return 'stop';
         case 'incomplete':
             return 'length';
+        // 複数のcaseを続けて書くと「どちらに一致しても同じ処理をする」という意味になる
+        // （フォールスルーの一種）。Pythonの `match` でいう `case 'failed' | 'cancelled':` に近い。
         case 'failed':
         case 'cancelled':
             return 'error';
@@ -107,6 +115,8 @@ function parseJsonArgs(raw: string): Record<string, unknown> {
 function convertResponseToResult(
     response: OpenAI.Responses.Response
 ): GenerateTextResult {
+    // `.find((item): item is X => ...)` はユーザー定義型ガード付きのfind。
+    // 見つかった要素の型を「output配列全体の合併型」から `X` 型に絞り込める。
     const messageItem = response.output.find(
         (item): item is OpenAI.Responses.ResponseOutputMessage => item.type === 'message'
     );
@@ -231,6 +241,8 @@ export function createOpenAIResponses(config: ProviderConfig = {}): Provider {
                 let usage: StreamChunk['usage'];
                 let emittedReasoning = false;
 
+                // OpenAI Responses APIのストリームは `event.type` によって様々な種類のイベントを
+                // 送ってくる（判別可能なユニオン型）。switchでそれぞれに対応する処理を書く。
                 for await (const event of stream) {
                     switch (event.type) {
                         case 'response.output_text.delta':
@@ -265,6 +277,8 @@ export function createOpenAIResponses(config: ProviderConfig = {}): Provider {
                             break;
                         }
 
+                        // 3つのcaseをまとめて同じ処理にしている（「推論の途中経過イベント」を検知して
+                        // 一度だけ 'event' チャンクをyieldする）。
                         case 'response.reasoning_text.delta':
                         case 'response.reasoning_summary_text.delta':
                         case 'response.reasoning_summary_part.added':

@@ -4,6 +4,7 @@ import type { LanguageModel, StreamChunk, ToolCall } from '../types';
 
 describe('generateStreamText', () => {
     it('throws when model does not support streaming', async () => {
+        // doStreamを持たないモックを使い、「doStream未実装ならエラーになる」ことを確認するテスト。
         const model: LanguageModel = {
             async doGenerate() {
                 return { text: 'ok', finishReason: 'stop' };
@@ -15,7 +16,10 @@ describe('generateStreamText', () => {
             messages: [{ role: 'user', content: 'hello' }],
         });
 
+        // `expect(async () => {...}).toThrow(...)` は「非同期関数を実行した結果、
+        // 例外がスローされること」を検証するアサーション。
         await expect(async () => {
+            // `for await (const _ of iter)` の `_` は「使わない変数」を示す慣習的な名前。
             for await (const _ of iter) {
                 // no-op
             }
@@ -33,6 +37,7 @@ describe('collectStreamResult', () => {
             },
         ];
 
+        // テストで使う一連のストリームチャンクを配列としてあらかじめ用意している。
         const chunks: StreamChunk[] = [
             { kind: 'event' },
             { kind: 'delta', text: 'Hel' },
@@ -45,6 +50,8 @@ describe('collectStreamResult', () => {
             },
         ];
 
+        // doStreamを非同期ジェネレータとして実装したモック。
+        // 呼び出されると `chunks` の中身を1つずつyieldする「偽のストリーミングモデル」。
         const model: LanguageModel = {
             async doGenerate() {
                 return { text: 'ok', finishReason: 'stop' };
@@ -60,6 +67,8 @@ describe('collectStreamResult', () => {
         const result = await collectStreamResult({
             model,
             messages: [{ role: 'user', content: 'hello' }],
+            // アロー関数をそのままコールバックとして渡している。
+            // Pythonの `lambda chunk: seen_kinds.append(chunk["kind"])` に相当。
             onChunk: (chunk) => seenKinds.push(chunk.kind),
         });
 
@@ -72,4 +81,3 @@ describe('collectStreamResult', () => {
         });
     });
 });
-

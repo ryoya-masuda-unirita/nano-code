@@ -40,10 +40,18 @@ function parseToolCallArgs(raw: string): Record<string, unknown> {
     }
 }
 
+// 戻り値の型を書いていない関数。TypeScriptは中身から自動で型を推論してくれる
+// （ここでは `OpenAI.ChatCompletionMessageParam[]`）。Pythonの型推論（mypyの一部）に近いが、
+// TypeScriptは基本的に常にこの推論を行う。
 function mapMessages(messages: GenerateParams['messages']) {
     return messages.map((message): OpenAI.ChatCompletionMessageParam => {
+        // `message.role` で分岐すると、各caseの中では自動的にmessageの型が絞り込まれる。
+        // ここでは4種類全部(assistant/tool/user/system)を網羅しているので、
+        // `default` を書かなくてもTypeScriptは「全パターンをカバーしている」と判断できる
+        // （網羅性チェック／exhaustiveness checking）。
         switch (message.role) {
             case 'assistant': {
+                // `?.` はオプショナルチェイニング。toolCallsがなければmapを呼ばずundefinedになる。
                 const tool_calls = message.toolCalls?.map(
                     (tc): OpenAI.ChatCompletionMessageFunctionToolCall => ({
                         id: tc.toolCallId,
@@ -57,6 +65,7 @@ function mapMessages(messages: GenerateParams['messages']) {
                 return {
                     role: 'assistant',
                     content: message.content,
+                    // 三項演算子＋スプレイドで「tool_callsがあるときだけそのキーを追加する」テクニック。
                     ...(tool_calls && tool_calls.length > 0 ? { tool_calls } : {}),
                 };
             }
@@ -92,11 +101,17 @@ export function createOpenAI(config: ProviderConfig = {}): Provider {
     //     doGenerate(params: GenerateParams): Promise<GenerateTextResult>;
     //     doStream?(params: GenerateParams): AsyncIterable<StreamChunk>;
     //   }
+    // 「modelIdを受け取ってLanguageModel型のオブジェクトを返す関数」を作り、
+    // 内部で `client` をクロージャとして捕まえている（anthropic.tsと同じパターン）。
     const provider = (modelId: string): LanguageModel => ({
         async doGenerate(params: GenerateParams): Promise<GenerateTextResult> {
             const tools =
                 params.tools && params.tools.length > 0
                     ? params.tools.map((tool) => ({
+                          // `'function' as const` は「この値は 'function' という文字列リテラル型に
+                          // 固定する」という指定（constアサーション）。
+                          // 単に `'function'` と書くと型が広い `string` に推論されてしまい、
+                          // OpenAI SDKが要求する厳密な型と合わなくなるためこう書く。
                           type: 'function' as const,
                           function: {
                               name: tool.name,
@@ -126,6 +141,9 @@ export function createOpenAI(config: ProviderConfig = {}): Provider {
                 }
                 const message = choice.message;
 
+                // `.filter((tc): tc is X => ...)` はユーザー定義型ガード付きのfilter。
+                // 「function型のtool_callだけを残し、残った配列の型もXであるとTypeScriptに伝える」。
+                // `??` で、tool_callsが存在しない場合は空配列にフォールバックしている。
                 const functionToolCalls =
                     message.tool_calls?.filter(
                         (
@@ -201,6 +219,9 @@ export function createOpenAI(config: ProviderConfig = {}): Provider {
                     { signal: params.signal }
                 );
 
+                // `Record<string, { id: string; name: string; argsText: string }>` は
+                // 「キーがstring、値がid/name/argsTextを持つオブジェクト」の辞書型。
+                // ストリームで少しずつ届くtool_callの断片を、キーごとに蓄積していくためのバッファ。
                 const toolCallBuffer: Record<
                     string,
                     { id: string; name: string; argsText: string }
@@ -210,6 +231,8 @@ export function createOpenAI(config: ProviderConfig = {}): Provider {
                 let usage: StreamChunk['usage'];
 
                 for await (const chunk of stream) {
+                    // `chunk.choices?.[0]` はオプショナルチェイニングと配列アクセスの組み合わせ。
+                    // choicesがundefinedなら安全にundefinedになる。
                     const choice = chunk.choices?.[0];
 
                     if (choice?.delta?.content) {

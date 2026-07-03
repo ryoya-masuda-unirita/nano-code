@@ -4,6 +4,7 @@ import { execCommand } from './execCommand';
 
 const WORKSPACE_ROOT = join(process.cwd(), 'workspace');
 
+// バリデーション関数は github.ts と同じ考え方（不正なら例外、問題なければ何も返さない）。
 function validateBranchName(name: string): void {
     if (!name || name.length > 120) {
         throw new Error('ブランチ名が不正です');
@@ -68,6 +69,8 @@ export const createBranch = {
             });
             return `ブランチを作成しました: ${branchName}\n${result}`;
         } catch (error) {
+            // `${error}` はテンプレートリテラル内でerrorを自動的に文字列化する
+            // （Error型は `toString()` で「Error: メッセージ」の形になる）。
             throw new Error(`ブランチ作成失敗: ${error}`);
         }
     }
@@ -85,6 +88,7 @@ export const commitChanges = {
                 description: 'コミットメッセージ'
             },
             files: {
+                // JSONスキーマ側では配列は `type: 'array'` ＋ `items` で要素の型を指定する。
                 type: 'array',
                 items: {
                     type: 'string'
@@ -94,6 +98,7 @@ export const commitChanges = {
         },
         required: ['message', 'files']
     },
+    // TypeScript側の型注釈では `files: string[]` と書くだけで「文字列の配列」を表せる。
     execute: async (args: { message: string; files: string[] }) => {
         if (!args.message || /[\0]/.test(args.message)) {
             throw new Error('コミットメッセージが不正です');
@@ -109,6 +114,7 @@ export const commitChanges = {
                 return 'コミットする変更がありません（既に最新の状態です）';
             }
 
+            // `for...of` は配列の各要素を順番に取り出すループ。Pythonの `for file in args.files:` と同じ。
             for (const file of args.files) {
                 validateFilePath(file);
                 await execCommand.execute({

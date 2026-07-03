@@ -4,10 +4,15 @@ import { createAnthropic } from './anthropic';
 import { createGoogle } from './google';
 import type { LanguageModel } from '../types';
 
+// `options?: { useResponses?: boolean }` は「インラインで書いたオブジェクト型」で、
+// かつ引数自体が `?` なので省略可能。Pythonの
+// `def create_model_from_env(options: dict | None = None) -> LanguageModel:` に近い。
 export function createModelFromEnv(options?: { useResponses?: boolean }): LanguageModel {
     const provider = process.env.LLM_PROVIDER;
     const modelName = process.env.LLM_MODEL;
     const apiKey = process.env.LLM_API_KEY;
+    // `options?.useResponses` はオプショナルチェイニング。
+    // optionsがundefinedなら全体がundefinedになり、`??` で右側の値にフォールバックする。
     const useResponses = options?.useResponses ?? process.env.USE_RESPONSES_API === 'true';
 
     if (!provider) {
@@ -20,6 +25,8 @@ export function createModelFromEnv(options?: { useResponses?: boolean }): Langua
         throw new Error('LLM_API_KEY 環境変数が設定されていません');
     }
 
+    // `switch` の各 `case` を `{ }` で囲むと、その中で宣言した `const` が
+    // 他のcaseブロックと名前が衝突しなくなる（ブロックスコープ）。
     switch (provider.toLowerCase()) {
         case 'openai': {
             if (useResponses) {
@@ -41,4 +48,3 @@ export function createModelFromEnv(options?: { useResponses?: boolean }): Langua
             throw new Error(`未対応のプロバイダ: ${provider}. 対応プロバイダ: openai, anthropic, google`);
     }
 }
-
