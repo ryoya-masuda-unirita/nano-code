@@ -5,15 +5,22 @@ on:
         description: "Nano code に実行させるタスク"
         required: false
         default: 'これはてすとです'
+  issues:
+    types: [opened]
 
 permissions: {}
 
 jobs:
   nano-code:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -29,4 +36,6 @@ jobs:
           LLM_MODEL: ${{ vars.LLM_MODEL }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           ISSUE_BODY: ${{ inputs.task }}
+          ISSUE_TEXT: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: bun run agent --yolo
